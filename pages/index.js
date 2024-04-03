@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
+import * as XLSX from 'xlsx';
 
 export default function Home() {
   const [jsonData, setJsonData] = useState('');
   const [loading, setLoading] = useState(false);
+  const [error, setError] = useState('');
 
   const handleFileDrop = async (e) => {
     e.preventDefault();
@@ -10,55 +12,117 @@ export default function Home() {
     await readFile(file);
   };
 
+  const getFileType = (file) => {
+    return file.name.split('.').pop().toLowerCase();
+  };
+
   const readFile = async (file) => {
     const reader = new FileReader();
     reader.onload = async () => {
-      setJsonData(reader.result); // Set the data directly to the textarea
+      const binaryStr = reader.result;
+      const fileType = getFileType(file);
+      if (fileType === 'xlsx') {
+        const workbook = XLSX.read(binaryStr, { type: 'binary' });
+        const sheetName = workbook.SheetNames[0];
+        const sheet = workbook.Sheets[sheetName];
+        const jsonData = XLSX.utils.sheet_to_json(sheet, { header: 1 });
+        setJsonData(jsonData); // Set the XLSX data directly
+      } else {
+        const textData = reader.result;
+        setJsonData(textData); // Set the text data directly
+      }
     };
-    reader.readAsText(file);
+    reader.readAsBinaryString(file);
   };
 
   const removeDuplicates = () => {
     setLoading(true);
-    const data = JSON.parse(jsonData);
-    const uniqueData = [...new Set(data.map(JSON.stringify))].map(JSON.parse);
-    setJsonData(JSON.stringify(uniqueData, null, 2));
-    setLoading(false);
-  };
+    setError('');
+    try {
+      let data = typeof jsonData === 'string' ? JSON.parse(jsonData) : jsonData;
+      if (Array.isArray(data)) {
+        const uniqueData = [...new Set(data.map(JSON.stringify))].map(JSON.parse);
+        setJsonData(uniqueData);
+      } else {
+        setError('Invalid data format for removing duplicates.');
+      }
+    } catch (error) {
+      setError('Error processing data: ' + error.message);
+    } finally {
+      setLoading(false);
+    }
+  }
+  
+  
 
   const cleanMissingValues = () => {
     setLoading(true);
-    const data = JSON.parse(jsonData);
-    const cleanedData = data.filter((item) => Object.values(item).every((value) => value !== ''));
-    setJsonData(JSON.stringify(cleanedData, null, 2));
-    setLoading(false);
+    try {
+      let data;
+      if (typeof jsonData === 'string') {
+        data = JSON.parse(jsonData);
+      } else {
+        data = jsonData;
+      }
+      if (Array.isArray(data)) {
+        const cleanedData = data.filter((item) =>
+          Object.values(item).every((value) => value !== '')
+        );
+        setJsonData(cleanedData);
+      }
+    } catch (error) {
+      console.error('Error processing data:', error);
+      setJsonData('Error processing data');
+    } finally {
+      setLoading(false);
+    }
   };
 
   const createOrderedListAZ = () => {
+    setLoading(true);
     try {
-      setLoading(true);
-      const uniqueData = JSON.parse(jsonData);
-      const orderedData = uniqueData.sort((a, b) => a.name.localeCompare(b.name));
-      setJsonData(JSON.stringify(orderedData, null, 2));
+      let data;
+      if (typeof jsonData === 'string') {
+        data = JSON.parse(jsonData);
+      } else {
+        data = jsonData;
+      }
+      if (Array.isArray(data)) {
+        const orderedData = data.sort((a, b) => a.name.localeCompare(b.name));
+        setJsonData(orderedData);
+      }
+    } catch (error) {
+      console.error('Error processing data:', error);
+      setJsonData('Error processing data');
+    } finally {
       setLoading(false);
-    } catch (err) {
-      console.error('Error:', err);
     }
   };
 
   const createOrderedListZA = () => {
+    setLoading(true);
     try {
-      setLoading(true);
-      const uniqueData = JSON.parse(jsonData);
-      const orderedData = uniqueData.sort((a, b) => b.name.localeCompare(a.name));
-      setJsonData(JSON.stringify(orderedData, null, 2));
+      let data;
+      if (typeof jsonData === 'string') {
+        data = JSON.parse(jsonData);
+      } else {
+        data = jsonData;
+      }
+      if (Array.isArray(data)) {
+        const orderedData = data.sort((a, b) => b.name.localeCompare(a.name));
+        setJsonData(orderedData);
+      }
+    } catch (error) {
+      console.error('Error processing data:', error);
+      setJsonData('Error processing data');
+    } finally {
       setLoading(false);
-    } catch (err) {
-      console.error('Error:', err);
     }
   };
 
-  // Add more data cleaning functions here
+  const clearFileData = () => {
+    setJsonData('');
+  };
 
   return (
     <div>
@@ -75,16 +139,42 @@ export default function Home() {
       >
         <p>Drag and drop files here</p>
       </div>
-      <textarea
-        style={{ width: '100%', minHeight: '200px', color: 'blue' }}
-        value={jsonData}
-        readOnly
-      />
+      {Array.isArray(jsonData[0]) ? (
+        <table>
+          <thead>
+            <tr>
+              {jsonData[0].map((header, index) => (
+                <th key={index}>{header}</th>
+              ))}
+            </tr>
+          </thead>
+          <tbody>
+            {jsonData.slice(1).map((row, rowIndex) => (
+              <tr key={rowIndex}>
+                {row.map((cell, cellIndex) => (
+                  <td key={cellIndex}>{cell}</td>
+                ))}
+              </tr>
+            ))}
+          </tbody>
+        </table>
+      ) : typeof jsonData === 'object' ? (
+        <pre>{JSON.stringify(jsonData, null, 2)}</pre>
+      ) : (
+        <textarea
+          style={{ width: '100%', minHeight: '200px', color: 'blue' }}
+          value={jsonData}
+          readOnly
+        />
+      )}
+      {error && <p style={{ color: 'red' }}>{error}</p>}
       <div style={{ marginTop: '10px' }}>
+        {jsonData.length>=0 ? jsonData.length : 0}
         <button onClick={removeDuplicates}>Remove Duplicates</button>
         <button onClick={cleanMissingValues}>Clean Missing Values</button>
         <button onClick={createOrderedListAZ}>Sort A-Z</button>
         <button onClick={createOrderedListZA}>Sort Z-A</button>
+        <button onClick={clearFileData}>Clear File Data</button>
         {/* Add more buttons for other data cleaning functions */}
       </div>
       {loading && <p>Loading...</p>}
